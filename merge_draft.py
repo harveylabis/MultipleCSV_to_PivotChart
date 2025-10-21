@@ -42,6 +42,7 @@ if use_case == "create":
     # Write to one Excel file
     merged_df.to_excel(output_file, index=False, sheet_name="Raw Data")
     print(f"Merged {len(all_files)} files into {output_file}")  
+
 elif use_case== "replace":
     ### REPLACE
     merged_path = input("Enter the merged path (should already exist): ")

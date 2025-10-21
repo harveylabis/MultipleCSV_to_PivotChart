@@ -53,8 +53,19 @@ def create_file():
         return
     
     create.create_by_merging(get_csv_files(), folder, filename)
-    messagebox.showinfo("Success", f"File will be saved as:\n{folder}/{filename}.xlsx")
+    messagebox.showinfo("Success", f"File will be saved as:\n{folder}/{filename}.xlsx.. loading the headers...")
+    load_headers_from_file(folder, filename)
 
+def generate_pivot_chart():
+    pc_axis = axis_var.get().strip()
+    pc_legend = legend_var.get().strip()
+    pc_values = values_var.get().strip()
+    pivotName = pivotChart_var.get().strip()
+    filename = output_filename_var.get().strip()
+    folder = output_folder_var.get().strip()
+    merged_file = os.path.join(folder, filename + ".xlsx")
+    create.generate_pivotChart(merged_file, pc_axis, pc_legend, pc_values, pivotName)
+    
 def get_csv_files():
     if merging_mode == "folder":
         all_files = glob.glob(os.path.join(folder_var.get().strip(), "*.csv")) # returns list of all csv file path
@@ -65,7 +76,8 @@ def get_csv_files():
     
     return all_files
 
-def load_headers_from_file(merged_file):
+def load_headers_from_file(folder, filename):
+    merged_file = os.path.join(folder, filename + ".xlsx")
     df = pd.read_excel(merged_file, nrows=1)  # just read the header row
     header_listbox.delete(0, tk.END)
     for col in df.columns:
@@ -73,7 +85,7 @@ def load_headers_from_file(merged_file):
 
 # Main window
 root = tk.Tk()
-root.geometry("1920x1080")
+root.geometry("1100x700")
 # root.resizable(False, False)
 root.title("Multiple CSVs to Pivot Chart")
 
@@ -158,7 +170,7 @@ create_button = tk.Button(output_filename_frame, text="Create", font=("Segoe UI"
 create_button.pack(side="left", padx=1)
 
 # CENTER FRAME 
-center_frame = tk.Frame(root, width=700, height=650, borderwidth=2, relief=tk.GROOVE)
+center_frame = tk.Frame(root, width=380, height=650, borderwidth=2, relief=tk.GROOVE)
 center_frame.pack_propagate(False) # False - use the defined size
 center_frame.pack(side="left", padx=25, pady=10)
 
@@ -176,28 +188,28 @@ header_listbox.config(yscrollcommand=header_scrollbar.set)
 
 # ---- Axis, Legend, Values ----
 # Frame for axis
-axis_frame = ttk.Frame(center_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
+axis_frame = ttk.Frame(center_frame, width=380, height=50, borderwidth=10, relief=tk.GROOVE)
 axis_frame.pack_propagate(False) # False - use the defined size
 axis_frame.pack(side="top", padx=5, pady=5) 
 ttk.Label(axis_frame, text="Axis:").pack(side='left', padx=5)
 axis_var = tk.StringVar()
-ttk.Entry(axis_frame, textvariable=axis_var, width=25).pack(side='left', padx=30)
+ttk.Entry(axis_frame, textvariable=axis_var, width=27).pack(side='left', padx=6)
 
 # Frame for legend
-legend_frame = ttk.Frame(center_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
+legend_frame = ttk.Frame(center_frame, width=380, height=50, borderwidth=10, relief=tk.GROOVE)
 legend_frame.pack_propagate(False) # False - use the defined size
 legend_frame.pack(side="top", padx=5, pady=5) 
 ttk.Label(legend_frame, text="Legend:").pack(side='left', padx=5)
-axis_var = tk.StringVar()
-ttk.Entry(legend_frame, textvariable=axis_var, width=25).pack(side='left', padx=5)
+legend_var = tk.StringVar()
+ttk.Entry(legend_frame, textvariable=legend_var, width=24).pack(side='left', padx=6)
 
 # Frame for values
 value_frame = ttk.Frame(center_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
 value_frame.pack_propagate(False) # False - use the defined size
 value_frame.pack(side="top", padx=5, pady=5) 
 ttk.Label(value_frame, text="Value:").pack(side='left', padx=5)
-axis_var = tk.StringVar()
-ttk.Entry(value_frame, textvariable=axis_var, width=25).pack(side='left', padx=18)
+values_var = tk.StringVar()
+ttk.Entry(value_frame, textvariable=values_var, width=25).pack(side='left', padx=18)
 
 # ---- Create Pivot Chart Button ----
 # Frame for output folder
@@ -206,12 +218,16 @@ generate_pc_frame.pack_propagate(False) # False - use the defined size
 generate_pc_frame.pack(side="top", padx=5, pady=5) 
 
 # Output pivotchart name + Create button
-ttk.Label(generate_pc_frame, text="PivotChart name:", width=15, anchor="w").pack(side="left")
+ttk.Label(generate_pc_frame, text="PivotChart name:", width=15).pack(side="left")
 pivotChart_var = tk.StringVar()
-pivotChart_entry = ttk.Entry(generate_pc_frame, textvariable=output_filename_var, width=25, justify="left")
+pivotChart_entry = ttk.Entry(generate_pc_frame, textvariable=pivotChart_var, width=17, justify="left")
 pivotChart_entry.pack(side="left", padx=5)
-tk.Button(generate_pc_frame, text="Generate PivotChart", width=25, height=2, font=("Segoe UI", 9, "bold"), bg="#4CAF50",fg="white").pack(side='left')
 
-load_headers_from_file(r'C:\Users\Harvey\Desktop\Projects\csv_to_pivotChart\Merged_Data.xlsx')
+gen_pivot_button = tk.Button(center_frame, text="Generate PivotChart", width=18, height=1, font=("Segoe UI", 10, "bold"), bg="#4CAF50",fg="white", command=generate_pivot_chart)
+gen_pivot_button.pack(side="top", padx=8, pady=8)
+
+merged_filename = output_filename_var.get().strip()
+merged_folder = output_folder_var.get().strip()
+output_file = os.path.join(merged_folder, merged_filename + ".xlsx") # Folder containing all CSV files
 
 root.mainloop()
