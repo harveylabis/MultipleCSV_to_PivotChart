@@ -3,6 +3,7 @@ from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
 import functions
+from openpyxl import load_workbook
 import glob
 import os
 import pandas as pd
@@ -40,12 +41,12 @@ def browse_output_folder():
         output_folder_var.set(output_path)
         output_folder_entry.xview_moveto(1)
 
-def create_file():
+def create_merged_file():
     filename = output_filename_var.get().strip()
     folder = output_folder_var.get().strip()
 
     if not filename or not folder:
-        messagebox.showerror("Error", "Please specify both filename and folder.")
+        messagebox.showerror("Error", "Please specify both filename and folder/files.")
         return
     
     file_exist = os.path.isfile(os.path.join(folder, filename + ".xlsx"))
@@ -57,6 +58,65 @@ def create_file():
     messagebox.showinfo("Success", f"File will be saved as:\n{folder}/{filename}.xlsx.. \n\nLoading the headers...")
 
     # auto load the header files
+    load_headers_from_file(folder, filename)
+
+def update_merged_file():
+    csv_files = get_csv_files()
+    column_id = id_var.get().strip()
+    filename = output_filename_var.get().strip()
+    folder = output_folder_var.get().strip()
+    merged_file = os.path.join(folder, filename + ".xlsx")
+
+    if not os.path.exists(merged_file):
+        messagebox.showerror("Error", "Merged file does not exist. Please create it first.")
+        return
+
+    # Read the current merged data
+    current_df = pd.read_excel(merged_file, sheet_name="Raw Data")
+    for csv_file in csv_files:
+        new_df = pd.read_csv(csv_file)
+        # Ensure column exists
+        if column_id not in new_df.columns:
+            messagebox.showerror("Error", f"Column '{column_id}' not found in {os.path.basename(csv_file)}")
+            continue
+        # CSV should have only 1 unique ID
+        csv_ids = new_df[column_id].unique()
+
+        if len(csv_ids) != 1:
+            messagebox.showwarning("Warning", f"{os.path.basename(csv_file)} contains multiple {column_id} values. Using first one.")
+        
+        csv_id = str(csv_ids[0])
+
+        # Check if ID exists already in merged file
+        if column_id in current_df.columns and (current_df[column_id].astype(str) == csv_id).any():
+            # Ask user whether to replace
+            response = messagebox.askyesno(
+                "ID Already Exists",
+                f"'{csv_id}' already exists in merged data.\n\nReplace it?"
+            )
+            if not response:
+                continue
+
+            current_df = current_df[current_df[column_id].astype(str) != csv_id] # Replace → remove old rows for this ID
+
+        current_df = pd.concat([current_df, new_df], ignore_index=True) # Append new data
+
+    # Save updated merged data
+    wb = load_workbook(merged_file)
+
+    # Remove old Raw Data sheet if exists
+    if "Raw Data" in wb.sheetnames:
+        del wb["Raw Data"]
+    
+    wb.save(merged_file)
+
+    # Re-open writer using workbook explicitly
+    with pd.ExcelWriter(merged_file, engine="openpyxl", mode="a") as writer:
+        writer._book = wb # Correct internal attribute
+        writer._sheets = {ws.title: ws for ws in wb.worksheets}  # Prevent overwriting others
+        current_df.to_excel(writer, sheet_name="Raw Data", index=False)  # Write new sheet
+    wb.save(merged_file)
+    messagebox.showinfo("Success", "Merged data successfully updated! \n\nLoading the headers...")
     load_headers_from_file(folder, filename)
 
 def generate_pivot_chart():
@@ -96,11 +156,17 @@ left_frame.pack(side="left", padx=10, pady=10)
 mode_frame = ttk.Frame(left_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
 mode_frame.pack_propagate(False) # False - use the defined size
 mode_frame.pack(side="top", padx=10, pady=10) 
-# Mode selection (folder vs individual)
+# Mode selection (folder vs files)
 mode_var = tk.StringVar(value="folder") # default is "folder"
 ttk.Label(mode_frame, text="Merging Mode:").pack(side="left", padx=5)
 ttk.Radiobutton(mode_frame, text="Use Folder", variable=mode_var, value="folder", command=toggle_mode).pack(side="left", padx=10)
-ttk.Radiobutton(mode_frame, text="Use Individual Files", variable=mode_var, value="individual", command=toggle_mode).pack(side="left", padx=10)
+ttk.Radiobutton(mode_frame, text="Use Files", variable=mode_var, value="files", command=toggle_mode).pack(side="left", padx=10)
+# header ID
+id_label = ttk.Label(mode_frame, text="ID:")
+id_var = tk.StringVar() # column header to identify unique CSV files
+id_entry = ttk.Entry(mode_frame, textvariable=id_var, width=15, justify="left")
+id_entry.pack(side="right", padx=5)
+id_label.pack(side="right", padx=5)
 
 # Frame for folder
 folder_frame = ttk.Frame(left_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
@@ -109,7 +175,7 @@ folder_frame.pack(side="top", padx=10, pady=10)
 # Folder selector
 ttk.Label(folder_frame, text="Folder:", width=6).pack(side="left")
 folder_var = tk.StringVar()
-folder_entry = ttk.Entry(folder_frame, textvariable=folder_var, width=50, justify="left")
+folder_entry = ttk.Entry(folder_frame, textvariable=folder_var, width=52, justify="left")
 folder_entry.pack(side="left", padx=5)
 folder_browse = tk.Button(folder_frame, text="Browse", width=6, command=browse_folder, font=("Segoe UI", 8))
 folder_browse.pack(side="left", padx=5)
@@ -127,7 +193,7 @@ for i in range(10):
     frame = ttk.Frame(individual_csv_frame)
     frame.pack(padx=3, pady=1, fill="x")
     tk.Label(frame, text=f"CSV {i+1:02d}:", width=6, anchor="w").pack(side="left")
-    entry = tk.Entry(frame, textvariable=entry_vars[i], width=50, justify="left", state="disabled")
+    entry = tk.Entry(frame, textvariable=entry_vars[i], width=52, justify="left", state="disabled")
     entry.pack(side="left", padx=5)
     file_entries.append(entry)
     button = tk.Button(frame, text="Browse", width=6, height=1, font=("Segoe UI", 8),
@@ -143,7 +209,7 @@ output_folder_frame.pack(side="top", padx=10, pady=10)
 # Output folder
 ttk.Label(output_folder_frame, text="Output Folder:", width=12, anchor="w").pack(side="left")
 output_folder_var = tk.StringVar()
-output_folder_entry = ttk.Entry(output_folder_frame, textvariable=output_folder_var, width=44, justify="left")
+output_folder_entry = ttk.Entry(output_folder_frame, textvariable=output_folder_var, width=46, justify="left")
 output_folder_entry.pack(side="left", padx=10)
 tk.Button(output_folder_frame, text="Browse", width=6, height=1, font=("Segoe UI", 8),
           command=browse_output_folder).pack(side="left", padx=1)
@@ -155,15 +221,15 @@ output_filename_frame.pack(side="top", padx=10, pady=10)
 # Output filename + Create button
 ttk.Label(output_filename_frame, text="Output name:", width=12, anchor="w").pack(side="left")
 output_filename_var = tk.StringVar()
-output_filename_entry = ttk.Entry(output_filename_frame, textvariable=output_filename_var, width=33, justify="left")
+output_filename_entry = ttk.Entry(output_filename_frame, textvariable=output_filename_var, width=35, justify="left")
 output_filename_entry.pack(side="left", padx=5)
 # button for Create
 create_merged_button = tk.Button(output_filename_frame, text="Create", font=("Segoe UI", 10, "bold"),
-                          bg="#4CAF50", fg="white", padx=10, pady=2, command=create_file)
+                          bg="#4CAF50", fg="white", padx=10, pady=2, command=create_merged_file)
 create_merged_button.pack(side="left", padx=10)
 # button for Update - TODO: create a function for update later
 update_merged_button = tk.Button(output_filename_frame, text="Update", font=("Segoe UI", 10, "bold"),
-                          bg="#4CAF50", fg="white", padx=10, pady=2, command=create_file)
+                          bg="#4CAF50", fg="white", padx=10, pady=2, command=update_merged_file)
 update_merged_button.pack(side="left", padx=10)
 
 # RIGHT FRAME 
