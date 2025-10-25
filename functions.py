@@ -53,7 +53,7 @@ def generate_pivotChart(merged_path, pc_axis, pc_legend, pc_values, pivotName):
     merged_wb.Sheets(pivotName).Activate()
 
     # Give Excel some time to fully open
-    time.sleep(2)
+    time.sleep(0.5)
 
     # Bring Excel to the front
     win32gui.SetForegroundWindow(win32gui.FindWindow(None, excel.Caption))

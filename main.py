@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
-import create
+import functions
 import glob
 import os
 import pandas as pd
@@ -24,20 +24,15 @@ def browse_file(index):
         file_entries[index].xview_moveto(1)  # Scroll to the end of the entry
 
 def toggle_mode():
-    global merging_mode
-    merging_mode = mode_var.get()
-    if merging_mode == "folder":
-        folder_entry.config(state="normal")
-        folder_button.config(state="normal")
-        for entry, button in zip(file_entries, file_buttons):
-            entry.config(state="disabled")
-            button.config(state="disabled")
-    else:
-        folder_entry.config(state="disabled")
-        folder_button.config(state="disabled")
-        for entry, button in zip(file_entries, file_buttons):
-            entry.config(state="normal")
-            button.config(state="normal")
+    folder_enabled = mode_var.get() == "folder"
+
+    folder_entry.config(state="normal" if folder_enabled else "disabled")
+    folder_browse.config(state="normal" if folder_enabled else "disabled")
+    
+    for entry, button in zip(file_entries, file_buttons):
+        state = "disabled" if folder_enabled else "normal"
+        entry.config(state=state)
+        button.config(state=state)
 
 def browse_output_folder():
     output_path = filedialog.askdirectory(title="Select Output Folder")
@@ -48,12 +43,20 @@ def browse_output_folder():
 def create_file():
     filename = output_filename_var.get().strip()
     folder = output_folder_var.get().strip()
+
     if not filename or not folder:
         messagebox.showerror("Error", "Please specify both filename and folder.")
         return
     
-    create.create_by_merging(get_csv_files(), folder, filename)
-    messagebox.showinfo("Success", f"File will be saved as:\n{folder}/{filename}.xlsx.. loading the headers...")
+    file_exist = os.path.isfile(os.path.join(folder, filename + ".xlsx"))
+    if file_exist:
+        result = messagebox.askokcancel("File Exists", f"The file already exists in the selected folder. Do you want to overwrite it?")
+        if not result:
+            return
+    functions.create_by_merging(get_csv_files(), folder, filename)
+    messagebox.showinfo("Success", f"File will be saved as:\n{folder}/{filename}.xlsx.. \n\nLoading the headers...")
+
+    # auto load the header files
     load_headers_from_file(folder, filename)
 
 def generate_pivot_chart():
@@ -64,17 +67,12 @@ def generate_pivot_chart():
     filename = output_filename_var.get().strip()
     folder = output_folder_var.get().strip()
     merged_file = os.path.join(folder, filename + ".xlsx")
-    create.generate_pivotChart(merged_file, pc_axis, pc_legend, pc_values, pivotName)
+    functions.generate_pivotChart(merged_file, pc_axis, pc_legend, pc_values, pivotName)
     
 def get_csv_files():
-    if merging_mode == "folder":
-        all_files = glob.glob(os.path.join(folder_var.get().strip(), "*.csv")) # returns list of all csv file path
-    elif merging_mode == "individual":
-        all_files = [var.get() for var in entry_vars if var.get().strip() != ""]
-    else:
-        return
-    
-    return all_files
+    if mode_var.get() == "folder":
+        return glob.glob(os.path.join(folder_var.get().strip(), "*.csv")) # returns list of all csv file path
+    return [var.get().strip() for var in entry_vars if var.get().strip() != ""] 
 
 def load_headers_from_file(folder, filename):
     merged_file = os.path.join(folder, filename + ".xlsx")
@@ -86,10 +84,11 @@ def load_headers_from_file(folder, filename):
 # Main window
 root = tk.Tk()
 root.geometry("1100x700")
-# root.resizable(False, False)
+root.resizable(False, False)
 root.title("Multiple CSVs to Pivot Chart")
 
-left_frame = tk.Frame(root, width=700, height=650, bg='lightblue')
+# LEFT FRAME
+left_frame = tk.Frame(root, width=700, height=650)
 left_frame.pack_propagate(False) # False - use the defined size
 left_frame.pack(side="left", padx=10, pady=10)
 
@@ -97,31 +96,28 @@ left_frame.pack(side="left", padx=10, pady=10)
 mode_frame = ttk.Frame(left_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
 mode_frame.pack_propagate(False) # False - use the defined size
 mode_frame.pack(side="top", padx=10, pady=10) 
-
 # Mode selection (folder vs individual)
-mode_var = tk.StringVar(value="folder")
+mode_var = tk.StringVar(value="folder") # default is "folder"
 ttk.Label(mode_frame, text="Merging Mode:").pack(side="left", padx=5)
 ttk.Radiobutton(mode_frame, text="Use Folder", variable=mode_var, value="folder", command=toggle_mode).pack(side="left", padx=10)
-ttk.Radiobutton(mode_frame, text="Use Individual Files", variable=mode_var, value="individual", command=toggle_mode).pack(side="left", padx=5)
+ttk.Radiobutton(mode_frame, text="Use Individual Files", variable=mode_var, value="individual", command=toggle_mode).pack(side="left", padx=10)
 
 # Frame for folder
 folder_frame = ttk.Frame(left_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
 folder_frame.pack_propagate(False) # False - use the defined size
 folder_frame.pack(side="top", padx=10, pady=10) 
-
 # Folder selector
 ttk.Label(folder_frame, text="Folder:", width=6).pack(side="left")
 folder_var = tk.StringVar()
-folder_entry = ttk.Entry(folder_frame, textvariable=folder_var, width=50, justify="right")
+folder_entry = ttk.Entry(folder_frame, textvariable=folder_var, width=50, justify="left")
 folder_entry.pack(side="left", padx=5)
-folder_button = ttk.Button(folder_frame, text="Browse", width=6, command=browse_folder)
-folder_button.pack(side="left", padx=1)
+folder_browse = tk.Button(folder_frame, text="Browse", width=6, command=browse_folder, font=("Segoe UI", 8))
+folder_browse.pack(side="left", padx=5)
 
 # Frame for individual csv files inputs
 individual_csv_frame = ttk.Frame(left_frame, width=700, height=350, borderwidth=10, relief=tk.GROOVE)
 individual_csv_frame.pack_propagate(False) # False - use the defined size
 individual_csv_frame.pack(side="top", padx=10, pady=10) 
-
 # Individual file selectors
 entry_vars = [tk.StringVar() for _ in range(10)]
 file_entries = []
@@ -130,8 +126,8 @@ file_buttons = []
 for i in range(10):
     frame = ttk.Frame(individual_csv_frame)
     frame.pack(padx=3, pady=1, fill="x")
-    tk.Label(frame, text=f"DUT {i+1:02d}:", width=6, anchor="w").pack(side="left")
-    entry = tk.Entry(frame, textvariable=entry_vars[i], width=50, justify="right", state="disabled")
+    tk.Label(frame, text=f"CSV {i+1:02d}:", width=6, anchor="w").pack(side="left")
+    entry = tk.Entry(frame, textvariable=entry_vars[i], width=50, justify="left", state="disabled")
     entry.pack(side="left", padx=5)
     file_entries.append(entry)
     button = tk.Button(frame, text="Browse", width=6, height=1, font=("Segoe UI", 8),
@@ -139,46 +135,47 @@ for i in range(10):
     button.pack(side="left", padx=1)
     file_buttons.append(button)
 
-# Initialize state
-toggle_mode()
 
 # Frame for output folder
 output_folder_frame = ttk.Frame(left_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
 output_folder_frame.pack_propagate(False) # False - use the defined size
 output_folder_frame.pack(side="top", padx=10, pady=10) 
-
 # Output folder
 ttk.Label(output_folder_frame, text="Output Folder:", width=12, anchor="w").pack(side="left")
 output_folder_var = tk.StringVar()
 output_folder_entry = ttk.Entry(output_folder_frame, textvariable=output_folder_var, width=44, justify="left")
-output_folder_entry.pack(side="left", padx=5)
+output_folder_entry.pack(side="left", padx=10)
 tk.Button(output_folder_frame, text="Browse", width=6, height=1, font=("Segoe UI", 8),
           command=browse_output_folder).pack(side="left", padx=1)
 
-# Frame for output folder
+# Frame for output filename
 output_filename_frame = ttk.Frame(left_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
 output_filename_frame.pack_propagate(False) # False - use the defined size
 output_filename_frame.pack(side="top", padx=10, pady=10) 
-
 # Output filename + Create button
 ttk.Label(output_filename_frame, text="Output name:", width=12, anchor="w").pack(side="left")
 output_filename_var = tk.StringVar()
-output_filename_entry = ttk.Entry(output_filename_frame, textvariable=output_filename_var, width=44, justify="left")
+output_filename_entry = ttk.Entry(output_filename_frame, textvariable=output_filename_var, width=33, justify="left")
 output_filename_entry.pack(side="left", padx=5)
-create_button = tk.Button(output_filename_frame, text="Create", font=("Segoe UI", 10, "bold"),
+# button for Create
+create_merged_button = tk.Button(output_filename_frame, text="Create", font=("Segoe UI", 10, "bold"),
                           bg="#4CAF50", fg="white", padx=10, pady=2, command=create_file)
-create_button.pack(side="left", padx=1)
+create_merged_button.pack(side="left", padx=10)
+# button for Update - TODO: create a function for update later
+update_merged_button = tk.Button(output_filename_frame, text="Update", font=("Segoe UI", 10, "bold"),
+                          bg="#4CAF50", fg="white", padx=10, pady=2, command=create_file)
+update_merged_button.pack(side="left", padx=10)
 
-# CENTER FRAME 
-center_frame = tk.Frame(root, width=380, height=650, borderwidth=2, relief=tk.GROOVE)
-center_frame.pack_propagate(False) # False - use the defined size
-center_frame.pack(side="left", padx=25, pady=10)
+# RIGHT FRAME 
+right_frame = tk.Frame(root, width=380, height=650, borderwidth=2, relief=tk.GROOVE)
+right_frame.pack_propagate(False) # False - use the defined size
+right_frame.pack(side="left", padx=10, pady=10)
 
 # Label
-tk.Label(center_frame, text="Headers: ").pack(anchor="w", padx=5)
+tk.Label(right_frame, text="HEADERS").pack(anchor="w", padx=5)
 
 # Scrollable Listbox for headers
-header_frame = ttk.Frame(center_frame)
+header_frame = ttk.Frame(right_frame)
 header_frame.pack(fill="both", expand=True, padx=5)
 header_listbox = tk.Listbox(header_frame, selectmode="extended", width=25, height=10)
 header_listbox.pack(side="left", fill="both", expand=True, padx=5)
@@ -188,46 +185,42 @@ header_listbox.config(yscrollcommand=header_scrollbar.set)
 
 # ---- Axis, Legend, Values ----
 # Frame for axis
-axis_frame = ttk.Frame(center_frame, width=380, height=50, borderwidth=10, relief=tk.GROOVE)
+axis_frame = ttk.Frame(right_frame, width=380, height=50, borderwidth=10, relief=tk.GROOVE)
 axis_frame.pack_propagate(False) # False - use the defined size
 axis_frame.pack(side="top", padx=5, pady=5) 
 ttk.Label(axis_frame, text="Axis:").pack(side='left', padx=5)
 axis_var = tk.StringVar()
-ttk.Entry(axis_frame, textvariable=axis_var, width=27).pack(side='left', padx=6)
+ttk.Entry(axis_frame, textvariable=axis_var, width=20).pack(side='right', padx=6)
 
 # Frame for legend
-legend_frame = ttk.Frame(center_frame, width=380, height=50, borderwidth=10, relief=tk.GROOVE)
+legend_frame = ttk.Frame(right_frame, width=380, height=50, borderwidth=10, relief=tk.GROOVE)
 legend_frame.pack_propagate(False) # False - use the defined size
 legend_frame.pack(side="top", padx=5, pady=5) 
 ttk.Label(legend_frame, text="Legend:").pack(side='left', padx=5)
 legend_var = tk.StringVar()
-ttk.Entry(legend_frame, textvariable=legend_var, width=24).pack(side='left', padx=6)
+ttk.Entry(legend_frame, textvariable=legend_var, width=20).pack(side='right', padx=6)
 
 # Frame for values
-value_frame = ttk.Frame(center_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
+value_frame = ttk.Frame(right_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
 value_frame.pack_propagate(False) # False - use the defined size
 value_frame.pack(side="top", padx=5, pady=5) 
 ttk.Label(value_frame, text="Value:").pack(side='left', padx=5)
 values_var = tk.StringVar()
-ttk.Entry(value_frame, textvariable=values_var, width=25).pack(side='left', padx=18)
+ttk.Entry(value_frame, textvariable=values_var, width=20).pack(side='right', padx=6)
 
 # ---- Create Pivot Chart Button ----
-# Frame for output folder
-generate_pc_frame = ttk.Frame(center_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
+# Frame for generate pivot chart 
+generate_pc_frame = ttk.Frame(right_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
 generate_pc_frame.pack_propagate(False) # False - use the defined size
 generate_pc_frame.pack(side="top", padx=5, pady=5) 
-
 # Output pivotchart name + Create button
-ttk.Label(generate_pc_frame, text="PivotChart name:", width=15).pack(side="left")
+ttk.Label(generate_pc_frame, text="Chart name:").pack(side="left")
 pivotChart_var = tk.StringVar()
-pivotChart_entry = ttk.Entry(generate_pc_frame, textvariable=pivotChart_var, width=17, justify="left")
-pivotChart_entry.pack(side="left", padx=5)
+pivotChart_entry = ttk.Entry(generate_pc_frame, textvariable=pivotChart_var, width=20, justify="left")
+pivotChart_entry.pack(side="right", padx=5)
 
-gen_pivot_button = tk.Button(center_frame, text="Generate PivotChart", width=18, height=1, font=("Segoe UI", 10, "bold"), bg="#4CAF50",fg="white", command=generate_pivot_chart)
+gen_pivot_button = tk.Button(right_frame, text="Generate PivotChart", width=18, height=1, font=("Segoe UI", 10, "bold"), 
+                             bg="#4CAF50",fg="white", command=generate_pivot_chart)
 gen_pivot_button.pack(side="top", padx=8, pady=8)
-
-merged_filename = output_filename_var.get().strip()
-merged_folder = output_folder_var.get().strip()
-output_file = os.path.join(merged_folder, merged_filename + ".xlsx") # Folder containing all CSV files
 
 root.mainloop()
