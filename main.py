@@ -4,6 +4,7 @@ from tkinter import messagebox
 from tkinter import ttk
 import functions
 from openpyxl import load_workbook
+from openpyxl.worksheet.table import Table, TableStyleInfo
 import glob
 import os
 import pandas as pd
@@ -66,6 +67,7 @@ def update_merged_file():
     filename = output_filename_var.get().strip()
     folder = output_folder_var.get().strip()
     merged_file = os.path.join(folder, filename + ".xlsx")
+    replace_n = 0
 
     if not os.path.exists(merged_file):
         messagebox.showerror("Error", "Merged file does not exist. Please create it first.")
@@ -96,10 +98,16 @@ def update_merged_file():
             )
             if not response:
                 continue
+            else:
+                replace_n += 1
 
             current_df = current_df[current_df[column_id].astype(str) != csv_id] # Replace → remove old rows for this ID
 
         current_df = pd.concat([current_df, new_df], ignore_index=True) # Append new data
+
+    if replace_n == 0:
+        messagebox.showinfo("Info", "No matching IDs were found to update. File remains unchanged.")
+        return 
 
     # Save updated merged data
     wb = load_workbook(merged_file)
@@ -116,7 +124,12 @@ def update_merged_file():
         writer._sheets = {ws.title: ws for ws in wb.worksheets}  # Prevent overwriting others
         current_df.to_excel(writer, sheet_name="Raw Data", index=False)  # Write new sheet
     wb.save(merged_file)
-    messagebox.showinfo("Success", "Merged data successfully updated! \n\nLoading the headers...")
+    messagebox.showinfo("Success", f"Updated {replace_n} ID items successfully! \n\nLoading the headers...")
+
+    # Convert the Raw Data to Table to easily refresh pivot chart later
+    functions.convert_to_RawData_table(merged_file)
+
+    # auto load the header files
     load_headers_from_file(folder, filename)
 
 def generate_pivot_chart():
@@ -163,7 +176,7 @@ ttk.Radiobutton(mode_frame, text="Use Folder", variable=mode_var, value="folder"
 ttk.Radiobutton(mode_frame, text="Use Files", variable=mode_var, value="files", command=toggle_mode).pack(side="left", padx=10)
 # header ID
 id_label = ttk.Label(mode_frame, text="ID:")
-id_var = tk.StringVar() # column header to identify unique CSV files
+id_var = tk.StringVar(value="Unit name") # column header to identify unique CSV files - default is Unit name
 id_entry = ttk.Entry(mode_frame, textvariable=id_var, width=15, justify="left")
 id_entry.pack(side="right", padx=5)
 id_label.pack(side="right", padx=5)

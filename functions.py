@@ -6,21 +6,43 @@ from openpyxl import load_workbook
 import win32com.client
 import win32gui
 import time
+from openpyxl import load_workbook
+from openpyxl.worksheet.table import Table, TableStyleInfo
 
-excel.ExcelFormatter.header_style = None # remove the formatting in header
-
-def create_by_merging(all_files, output_folder, output_filename):    
-    output_file = os.path.join(output_folder, output_filename + ".xlsx") # Folder containing all CSV files
+def create_by_merging(all_files, output_folder, output_filename):   
+    # Folder containing all CSV files 
+    output_file = os.path.join(output_folder, output_filename + ".xlsx") 
     merged_df = pd.DataFrame()
 
     # Read and merge CSV files
     df_list = [pd.read_csv(f, parse_dates=False) for f in all_files]
     merged_df = pd.concat(df_list, ignore_index=True)
+
     # Write to one Excel file
     merged_df.to_excel(output_file, index=False, sheet_name="Raw Data")
-    
     print(f"Merged {len(all_files)} files into {output_file}")  
+    
+    # Convert to Table
+    convert_to_RawData_table(output_file)
 
+def convert_to_RawData_table(merged_file):
+    # Convert the Raw Data to Table to easily refresh pivot chart later
+    wb = load_workbook(merged_file)
+    ws = wb["Raw Data"]
+    end_row, end_col = ws.max_row, ws.max_column
+    table_range = f"A1:{ws.cell(end_row, end_col).coordinate}"
+
+    # clear old tables because it is invalid - range have changed
+    if ws._tables:
+        for tbl in list(ws._tables.values()):
+            ws._tables.pop(tbl.name)
+
+    table = Table(displayName="RawDataTable", ref=table_range)
+    style = TableStyleInfo(name="TableStyleLight1")
+    table.tableStyleInfo = style
+    ws.add_table(table)
+    wb.save(merged_file)
+    
 def generate_pivotChart(merged_path, pc_axis, pc_legend, pc_values, pivotName):
     # Paths to your files
     updater_path = r"C:\Users\Harvey\Desktop\Projects\csv_to_pivotChart\Updater.xlsm"
