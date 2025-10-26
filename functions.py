@@ -79,3 +79,31 @@ def generate_pivotChart(merged_path, pc_axis, pc_legend, pc_values, pivotName):
 
     # Bring Excel to the front
     win32gui.SetForegroundWindow(win32gui.FindWindow(None, excel.Caption))
+
+def rebindPivotSources(merged_file):
+     # Paths to your files
+    updater_path = r"C:\Users\Harvey\Desktop\Projects\csv_to_pivotChart\Updater.xlsm"
+
+    # Start Excel
+    excel = win32com.client.Dispatch("Excel.Application")
+    excel.Visible = True  # Set to True to automatically open the merged file after macro runs
+
+    # Open the Updater file
+    updater_wb = excel.Workbooks.Open(updater_path)
+
+    # Run the rebinding macro
+    excel.Application.Run("Module4.RebindPivotSources", merged_file)
+
+    # Save & close Updater (optional)
+    updater_wb.Save()
+    updater_wb.Close()
+
+    # Open the merged data file
+    merged_wb = excel.Workbooks.Open(merged_file)
+    print(f"Opened merged file: {merged_wb.Name}")
+
+    # Give Excel some time to fully open
+    time.sleep(0.5)
+
+    # Bring Excel to the front
+    win32gui.SetForegroundWindow(win32gui.FindWindow(None, excel.Caption))

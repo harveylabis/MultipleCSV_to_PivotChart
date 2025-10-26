@@ -81,6 +81,7 @@ def update_merged_file():
         if column_id not in new_df.columns:
             messagebox.showerror("Error", f"Column '{column_id}' not found in {os.path.basename(csv_file)}")
             continue
+
         # CSV should have only 1 unique ID
         csv_ids = new_df[column_id].unique()
 
@@ -111,24 +112,27 @@ def update_merged_file():
 
     # Save updated merged data
     wb = load_workbook(merged_file)
-
-    # Remove old Raw Data sheet if exists
-    if "Raw Data" in wb.sheetnames:
-        del wb["Raw Data"]
+    ws = wb["Raw Data"] 
+    
+    # clear old data except header
+    if ws.max_row > 1:
+        ws.delete_rows(2, ws.max_row)
     
     wb.save(merged_file)
 
-    # Re-open writer using workbook explicitly
-    with pd.ExcelWriter(merged_file, engine="openpyxl", mode="a") as writer:
-        writer._book = wb # Correct internal attribute
-        writer._sheets = {ws.title: ws for ws in wb.worksheets}  # Prevent overwriting others
-        current_df.to_excel(writer, sheet_name="Raw Data", index=False)  # Write new sheet
-    wb.save(merged_file)
-    messagebox.showinfo("Success", f"Updated {replace_n} ID items successfully! \n\nLoading the headers...")
+    # Append updated data
+    with pd.ExcelWriter(merged_file, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+        writer._book = wb
+        writer._sheets = {ws.title: ws for ws in wb.worksheets}
+        current_df.to_excel(writer, sheet_name="Raw Data", index=False, startrow=1, header=False)
 
     # Convert the Raw Data to Table to easily refresh pivot chart later
     functions.convert_to_RawData_table(merged_file)
 
+    # rebind and show buttons
+    functions.rebindPivotSources(merged_file)
+
+    messagebox.showinfo("Success", f"Updated merged file. \n\nReplaced {replace_n} entries based on '{column_id}'. \n\nLoading headers...")
     # auto load the header files
     load_headers_from_file(folder, filename)
 
@@ -149,10 +153,12 @@ def get_csv_files():
 
 def load_headers_from_file(folder, filename):
     merged_file = os.path.join(folder, filename + ".xlsx")
-    df = pd.read_excel(merged_file, nrows=1)  # just read the header row
+    df = pd.read_excel(merged_file, sheet_name="Raw Data", nrows=1)  # just read the header row
+    print("df header columns:", df.columns.tolist())
     header_listbox.delete(0, tk.END)
     for col in df.columns:
         header_listbox.insert(tk.END, col)
+    print("Done printing headers to listbox.")
 
 # Main window
 root = tk.Tk()
@@ -213,7 +219,6 @@ for i in range(10):
                        state="disabled", command=lambda i=i: browse_file(i))
     button.pack(side="left", padx=1)
     file_buttons.append(button)
-
 
 # Frame for output folder
 output_folder_frame = ttk.Frame(left_frame, width=700, height=50, borderwidth=10, relief=tk.GROOVE)
